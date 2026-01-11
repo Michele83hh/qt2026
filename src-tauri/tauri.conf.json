@@ -26,7 +26,7 @@
   },
   "bundle": {
     "active": true,
-    "targets": ["msi", "nsis"],
+    "targets": "all",
     "resources": {
       "../src/data/questions.json": "data/questions.json"
     },
