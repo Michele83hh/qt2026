@@ -8,7 +8,7 @@ const host = process.env.TAURI_DEV_HOST;
 // https://vite.dev/config/
 export default defineConfig(async () => ({
   // Base path for GitHub Pages (repository name)
-  base: process.env.TAURI_ENV_PLATFORM ? "/" : "/ccna-exam-app/",
+  base: process.env.TAURI_ENV_PLATFORM ? "/" : "/qt2026/",
   plugins: [
     react(),
     VitePWA({
