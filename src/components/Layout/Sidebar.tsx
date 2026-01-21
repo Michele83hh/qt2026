@@ -274,14 +274,21 @@ export default function Sidebar({ currentView, onNavigate }: SidebarProps) {
             <span className="text-sm font-black text-cyan-400">{questionCount} Fragen</span>
           </div>
 
-          {/* Topics breakdown */}
+          {/* Topics breakdown - in official CCNA order */}
           <div className="space-y-1.5">
-            {Object.entries(topicCounts).slice(0, 6).map(([topic, count]) => (
+            {[
+              'Network Fundamentals',
+              'Network Access',
+              'IP Connectivity',
+              'IP Services',
+              'Security Fundamentals',
+              'Automation and Programmability'
+            ].map((topic) => (
               <div key={topic} className="flex items-center justify-between text-xs">
                 <span className="text-slate-400 truncate max-w-[140px]" title={topic}>
                   {topic.replace('Fundamentals', '').replace('Automation and ', '').trim()}
                 </span>
-                <span className="text-slate-300 font-mono">{count}</span>
+                <span className="text-slate-300 font-mono">{topicCounts[topic] || 0}</span>
               </div>
             ))}
           </div>
