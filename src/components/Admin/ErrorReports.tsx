@@ -197,9 +197,28 @@ export default function ErrorReports() {
       'option_text_error': 'Fehler in Antwortoption',
       'wrong_correct_answer': 'Falsche korrekte Antwort',
       'explanation_error': 'Fehler in Erklärung',
+      'typo': 'Tippfehler',
+      'wrong_answer': 'Falsche Antwort',
+      'unclear': 'Unklar formuliert',
+      'missing_info': 'Fehlende Information',
       'other': 'Sonstiges'
     };
     return labels[type] || type;
+  };
+
+  // Strip HTML tags for plain text preview
+  const stripHtml = (html: string): string => {
+    const tmp = document.createElement('div');
+    tmp.innerHTML = html;
+    return tmp.textContent || tmp.innerText || '';
+  };
+
+  // Truncate text to a certain length
+  const truncateText = (text: string, maxLength: number): string => {
+    const stripped = stripHtml(text);
+    return stripped.length > maxLength
+      ? stripped.substring(0, maxLength) + '...'
+      : stripped;
   };
 
   return (
@@ -300,8 +319,8 @@ export default function ErrorReports() {
           <div className="space-y-4">
             {reports.map((report) => {
               const question = questions.get(report.questionId);
-              const questionPreview = question && question.question
-                ? question.question.substring(0, 100) + (question.question.length > 100 ? '...' : '')
+              const questionPreviewText = question && question.question
+                ? truncateText(question.question, 150)
                 : `Frage-ID: ${report.questionId}`;
 
               const isResolved = report.status === 'fixed';
@@ -326,7 +345,10 @@ export default function ErrorReports() {
                           {getReportTypeLabel(report.reportType)}
                         </span>
                         <span className="bg-amber-500 text-white px-3 py-1 rounded-lg text-sm font-bold border border-amber-600">
-                          {report.target}
+                          {report.target === 'question' ? 'Frage' :
+                           report.target === 'option' ? `Option ${report.targetIndex !== undefined ? report.targetIndex + 1 : ''}` :
+                           report.target === 'answer' ? 'Antwort' :
+                           report.target === 'explanation' ? 'Erklärung' : report.target}
                         </span>
                         <span className={`px-3 py-1 rounded-lg text-sm font-bold border ${
                           report.status === 'pending'
@@ -339,10 +361,23 @@ export default function ErrorReports() {
                       <div className="text-gray-400 text-sm mb-3">
                         Gemeldet am: {new Date(report.reportedAt).toLocaleString('de-DE')}
                       </div>
+
+                      {/* Question Preview with HTML rendering */}
                       <div className="bg-gray-800 rounded-lg p-4 border border-gray-600 mb-3">
-                        <strong className="text-white block mb-2">Frage:</strong>
-                        <p className="text-gray-300 italic">{questionPreview}</p>
+                        <div className="flex items-center gap-2 mb-2">
+                          <strong className="text-white">Frage:</strong>
+                          <span className="text-xs text-blue-400 bg-blue-500/20 px-2 py-0.5 rounded">Vorschau</span>
+                        </div>
+                        {question && question.question ? (
+                          <div
+                            className="text-gray-300 italic report-preview"
+                            dangerouslySetInnerHTML={{ __html: question.question }}
+                          />
+                        ) : (
+                          <p className="text-gray-500 italic">{questionPreviewText}</p>
+                        )}
                       </div>
+
                       {report.description && (
                         <div className="bg-gray-800 rounded-lg p-4 border border-gray-600">
                           <strong className="text-white block mb-2">Fehlerbeschreibung:</strong>
@@ -377,6 +412,45 @@ export default function ErrorReports() {
             })}
           </div>
         )}
+
+        {/* Styles for HTML preview in reports */}
+        <style>{`
+          .report-preview h3 {
+            font-size: 1.25rem;
+            font-weight: bold;
+            margin: 0.5rem 0;
+          }
+          .report-preview h4 {
+            font-size: 1.1rem;
+            font-weight: bold;
+            margin: 0.5rem 0;
+          }
+          .report-preview p {
+            margin: 0.5rem 0;
+          }
+          .report-preview ul {
+            margin: 0.5rem 0;
+            padding-left: 1.5rem;
+            list-style-type: disc;
+          }
+          .report-preview ol {
+            margin: 0.5rem 0;
+            padding-left: 1.5rem;
+            list-style-type: decimal;
+          }
+          .report-preview li {
+            margin: 0.25rem 0;
+          }
+          .report-preview b, .report-preview strong {
+            font-weight: bold;
+          }
+          .report-preview i, .report-preview em {
+            font-style: italic;
+          }
+          .report-preview u {
+            text-decoration: underline;
+          }
+        `}</style>
 
         {/* Edit Modal */}
         {editingQuestionId && (

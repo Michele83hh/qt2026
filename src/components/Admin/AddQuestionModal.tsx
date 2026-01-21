@@ -12,6 +12,7 @@ interface AddQuestionModalProps {
   canNavigateNext?: boolean;
   currentIndex?: number;
   totalCount?: number;
+  onBackToChangeLog?: () => void;
 }
 
 export default function AddQuestionModal({
@@ -22,7 +23,8 @@ export default function AddQuestionModal({
   canNavigatePrev = false,
   canNavigateNext = false,
   currentIndex,
-  totalCount
+  totalCount,
+  onBackToChangeLog
 }: AddQuestionModalProps) {
   // Common fields
   const [questionText, setQuestionText] = useState(initialQuestion?.question || '');
@@ -176,6 +178,30 @@ export default function AddQuestionModal({
       onNavigate(direction);
     }
   };
+
+  // Keyboard navigation with arrow keys
+  useEffect(() => {
+    if (!onNavigate) return;
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Don't navigate if typing in an input, textarea, or contenteditable
+      const target = e.target as HTMLElement;
+      if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable) {
+        return;
+      }
+
+      if (e.key === 'ArrowLeft' && canNavigatePrev) {
+        e.preventDefault();
+        handleNavigate('prev');
+      } else if (e.key === 'ArrowRight' && canNavigateNext) {
+        e.preventDefault();
+        handleNavigate('next');
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [onNavigate, canNavigatePrev, canNavigateNext, handleNavigate]);
 
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -416,8 +442,21 @@ export default function AddQuestionModal({
               </p>
             </div>
             <div className="flex items-center gap-2">
+              {/* Back to Change Log button */}
+              {onBackToChangeLog && (
+                <button
+                  onClick={onBackToChangeLog}
+                  className="px-4 py-2 rounded-lg font-bold transition-all bg-purple-500/80 hover:bg-purple-500 text-white flex items-center gap-2 mr-2"
+                  title="Zurück zum Änderungsprotokoll"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 17l-5-5m0 0l5-5m-5 5h12" />
+                  </svg>
+                  Protokoll
+                </button>
+              )}
               {/* Navigation buttons when editing */}
-              {initialQuestion && onNavigate && (
+              {initialQuestion && onNavigate && !onBackToChangeLog && (
                 <div className="flex gap-2 mr-4">
                   <button
                     onClick={() => handleNavigate('prev')}

@@ -1,14 +1,40 @@
 use std::fs;
 use std::path::PathBuf;
+use std::env;
 use serde_json::Value;
 use tauri::{AppHandle, Manager};
 
-/// Get the path to questions.json in the app data directory
+/// Get the path to questions.json
+/// In development: writes directly to src/data/questions.json
+/// In production: uses app data directory
 fn get_questions_path(app: &AppHandle) -> Result<PathBuf, String> {
+    // Check if we're in development mode by looking for src/data relative to current dir
+    // or by checking the TAURI_DEV environment variable
+    let current_dir = env::current_dir()
+        .map_err(|e| format!("Failed to get current dir: {}", e))?;
+
+    // Try to find src/data/questions.json relative to current directory
+    let dev_path = current_dir.join("src").join("data").join("questions.json");
+
+    if dev_path.exists() {
+        // Development mode - write directly to source
+        return Ok(dev_path);
+    }
+
+    // Also check parent directory (in case running from src-tauri)
+    let parent_dev_path = current_dir.parent()
+        .map(|p| p.join("src").join("data").join("questions.json"));
+
+    if let Some(path) = parent_dev_path {
+        if path.exists() {
+            return Ok(path);
+        }
+    }
+
+    // Production mode - use app data directory
     let app_data_dir = app.path().app_data_dir()
         .map_err(|e| format!("Failed to get app data dir: {}", e))?;
 
-    // Create app data directory if it doesn't exist
     if !app_data_dir.exists() {
         fs::create_dir_all(&app_data_dir)
             .map_err(|e| format!("Failed to create app data dir: {}", e))?;
@@ -17,16 +43,16 @@ fn get_questions_path(app: &AppHandle) -> Result<PathBuf, String> {
     Ok(app_data_dir.join("questions.json"))
 }
 
-/// Initialize questions.json by copying from bundled resources if needed
+/// Initialize questions.json if needed (only for production mode)
 fn init_questions(app: &AppHandle) -> Result<(), String> {
     let questions_path = get_questions_path(app)?;
 
-    // If questions.json already exists in app data, we're done
+    // If questions.json already exists, we're done
     if questions_path.exists() {
         return Ok(());
     }
 
-    // Try to copy from bundled resources
+    // Try to copy from bundled resources (production only)
     let resource_path = app.path().resource_dir()
         .map_err(|e| format!("Failed to get resource dir: {}", e))?
         .join("data")

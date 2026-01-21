@@ -44,12 +44,15 @@ export default function QuestionDatabase() {
   const [showChangeLog, setShowChangeLog] = useState(false);
   const [editingQuestion, setEditingQuestion] = useState<OldQuestion | null>(null);
   const [editingIndex, setEditingIndex] = useState<number>(-1);
+  const [openedFromChangeLog, setOpenedFromChangeLog] = useState(false);
   const [filterCategory, setFilterCategory] = useState<CategoryKey | 'all'>('all');
   const [filterDifficulty, setFilterDifficulty] = useState<'all' | 'easy' | 'medium' | 'hard'>('all');
 
   useEffect(() => {
     loadQuestions();
   }, []);
+
+
 
   const loadQuestions = async () => {
     try {
@@ -324,6 +327,25 @@ export default function QuestionDatabase() {
     }
   };
 
+  const handleEditQuestionById = async (questionId: string) => {
+    // Find the question in the current list
+    const questionIndex = questions.findIndex(q => q.id === questionId);
+    if (questionIndex !== -1) {
+      setOpenedFromChangeLog(true);
+      setShowChangeLog(false);
+      await handleEditQuestion(questions[questionIndex], questionIndex);
+    } else {
+      notify.error('Frage nicht gefunden!');
+    }
+  };
+
+  const handleBackToChangeLog = () => {
+    setEditingQuestion(null);
+    setEditingIndex(-1);
+    setOpenedFromChangeLog(false);
+    setShowChangeLog(true);
+  };
+
   const handleSaveEdit = async (updatedQuestion: OldQuestion) => {
     const isTauri = '__TAURI_INTERNALS__' in window;
 
@@ -537,9 +559,36 @@ export default function QuestionDatabase() {
       </div>
 
       {/* Question List */}
-      <div className="bg-gray-700 rounded-2xl shadow-sm overflow-hidden border border-gray-600">
-        <div className="overflow-x-auto">
-          <table className="w-full min-w-max">
+      <div className="bg-gray-700 rounded-2xl shadow-sm border border-gray-600">
+        {/* Sticky Scroll Controls */}
+        <div className="sticky top-0 z-30 flex items-center justify-between px-4 py-2 bg-gray-800 border-b border-gray-600 rounded-t-2xl">
+          <span className="text-gray-400 text-sm">Tabelle scrollen:</span>
+          <div className="flex gap-2">
+            <button
+              onClick={() => {
+                const container = document.getElementById('question-table-scroll');
+                if (container) container.scrollBy({ left: -400, behavior: 'smooth' });
+              }}
+              className="px-4 py-1.5 bg-gray-600 hover:bg-gray-500 text-white rounded-lg font-semibold transition-colors text-sm"
+            >
+              ← Links
+            </button>
+            <button
+              onClick={() => {
+                const container = document.getElementById('question-table-scroll');
+                if (container) container.scrollBy({ left: 400, behavior: 'smooth' });
+              }}
+              className="px-4 py-1.5 bg-gray-600 hover:bg-gray-500 text-white rounded-lg font-semibold transition-colors text-sm"
+            >
+              Rechts →
+            </button>
+          </div>
+        </div>
+        <div
+          id="question-table-scroll"
+          className="overflow-x-auto"
+        >
+          <table className="w-full" style={{ minWidth: '1400px' }}>
             <thead className="bg-gradient-to-r from-blue-600 to-indigo-600 text-white">
               <tr>
                 <th className="px-6 py-4 text-left font-bold whitespace-nowrap">ID</th>
@@ -645,7 +694,7 @@ export default function QuestionDatabase() {
       </div>
 
       {/* Footer Stats */}
-      <div className="mt-6 text-center text-sm text-gray-400">
+      <div className="mt-6 mb-4 text-center text-sm text-gray-400">
         Zeige {filteredQuestions.length} von {questions.length} Fragen
       </div>
 
@@ -663,20 +712,25 @@ export default function QuestionDatabase() {
           onClose={() => {
             setEditingQuestion(null);
             setEditingIndex(-1);
+            setOpenedFromChangeLog(false);
           }}
           onSave={handleSaveEdit}
           initialQuestion={editingQuestion}
-          onNavigate={handleNavigateQuestion}
+          onNavigate={openedFromChangeLog ? undefined : handleNavigateQuestion}
           canNavigatePrev={editingIndex > 0}
           canNavigateNext={editingIndex < filteredQuestions.length - 1}
           currentIndex={editingIndex}
           totalCount={filteredQuestions.length}
+          onBackToChangeLog={openedFromChangeLog ? handleBackToChangeLog : undefined}
         />
       )}
 
       {/* Change Log Viewer */}
       {showChangeLog && (
-        <ChangeLogViewer onClose={() => setShowChangeLog(false)} />
+        <ChangeLogViewer
+          onClose={() => setShowChangeLog(false)}
+          onEditQuestion={handleEditQuestionById}
+        />
       )}
     </div>
   );

@@ -2,14 +2,28 @@ import { Question } from '../types/Question';
 
 /**
  * Fisher-Yates shuffle algorithm - generic array shuffler
+ * This is the ONLY correct way to shuffle arrays uniformly.
+ * DO NOT use array.sort(() => Math.random() - 0.5) - it's biased!
  */
-function shuffleArray<T>(array: T[]): T[] {
+export function shuffleArray<T>(array: T[]): T[] {
   const result = [...array];
   for (let i = result.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
+    // Use crypto for better randomness when available
+    const randomValue = typeof crypto !== 'undefined' && crypto.getRandomValues
+      ? crypto.getRandomValues(new Uint32Array(1))[0] / (0xFFFFFFFF + 1)
+      : Math.random();
+    const j = Math.floor(randomValue * (i + 1));
     [result[i], result[j]] = [result[j], result[i]];
   }
   return result;
+}
+
+/**
+ * Shuffles an array of questions (their order, not options)
+ * Use this instead of array.sort(() => Math.random() - 0.5)
+ */
+export function shuffleQuestions(questions: Question[]): Question[] {
+  return shuffleArray(questions);
 }
 
 /**
@@ -22,14 +36,8 @@ function shuffleArray<T>(array: T[]): T[] {
 export function shuffleQuestionOptions(question: Question): Question {
   // Multiple-choice shuffling
   if (question.type === 'multiple-choice-single' || question.type === 'multiple-choice-multiple') {
-    // Create index mapping array [0, 1, 2, 3, ...]
-    const indices = question.options.map((_, i) => i);
-
-    // Fisher-Yates shuffle algorithm
-    for (let i = indices.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [indices[i], indices[j]] = [indices[j], indices[i]];
-    }
+    // Use shuffleArray for indices to get proper Fisher-Yates with crypto
+    const indices = shuffleArray(question.options.map((_, i) => i));
 
     // Create shuffled options based on new indices
     const shuffledOptions = indices.map(i => question.options[i]);

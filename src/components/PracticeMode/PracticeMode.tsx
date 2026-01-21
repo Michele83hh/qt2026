@@ -4,7 +4,7 @@ import { getQuestionsByTopic, allQuestions } from '../../utils/questionLoader';
 import QuestionCard from '../ExamMode/QuestionCard';
 import { ErrorReportModal } from '../ExamMode/ErrorReportModal';
 import { QuestionReport } from '../../types/questions';
-import { shuffleQuestionsOptions } from '../../utils/questionShuffler';
+import { shuffleQuestionsOptions, shuffleArray } from '../../utils/questionShuffler';
 import { notify } from '../../store/notificationStore';
 import { getExpectedAnswerCount } from '../../utils/questionHelpers';
 
@@ -37,6 +37,8 @@ export default function PracticeMode({ onExit }: PracticeModeProps) {
   const [stats, setStats] = useState({ correct: 0, incorrect: 0 });
   const [timeRemaining, setTimeRemaining] = useState(0);
   const [practiceStarted, setPracticeStarted] = useState(false);
+  const [practiceEnded, setPracticeEnded] = useState(false);
+  const [reviewMode, setReviewMode] = useState(false);
   const [showReportModal, setShowReportModal] = useState(false);
 
   const topics: Topic[] = [
@@ -64,12 +66,12 @@ export default function PracticeMode({ onExit }: PracticeModeProps) {
     return () => clearInterval(timer);
   }, [practiceStarted, isUnlimited]);
 
-  // Separate effect to handle practice end
+  // Separate effect to handle practice end when time runs out
   useEffect(() => {
-    if (timeRemaining === 0 && practiceStarted && !isUnlimited) {
-      endPractice();
+    if (timeRemaining === 0 && practiceStarted && !isUnlimited && !practiceEnded) {
+      setPracticeEnded(true);
     }
-  }, [timeRemaining, practiceStarted, isUnlimited]);
+  }, [timeRemaining, practiceStarted, isUnlimited, practiceEnded]);
 
   // Keyboard navigation
   useEffect(() => {
@@ -106,14 +108,13 @@ export default function PracticeMode({ onExit }: PracticeModeProps) {
     let practiceQuestions: Question[] = [];
 
     if (mode === 'random') {
-      // Random mode: all questions shuffled
-      practiceQuestions = [...allQuestions].sort(() => Math.random() - 0.5);
+      // Random mode: all questions shuffled with proper Fisher-Yates
+      practiceQuestions = shuffleArray(allQuestions);
     } else if (mode === 'topics') {
-      // Topic mode: selected topics shuffled
+      // Topic mode: selected topics shuffled with proper Fisher-Yates
       if (selectedTopics.length === 0) return;
-      practiceQuestions = selectedTopics
-        .flatMap(topic => getQuestionsByTopic(topic))
-        .sort(() => Math.random() - 0.5);
+      const topicQuestions = selectedTopics.flatMap(topic => getQuestionsByTopic(topic));
+      practiceQuestions = shuffleArray(topicQuestions);
     }
 
     // Shuffle answer options for each question
@@ -209,7 +210,8 @@ export default function PracticeMode({ onExit }: PracticeModeProps) {
       // Check if next question was already answered
       setShowExplanation(answeredQuestions.has(currentQuestionIndex + 1));
     } else {
-      endPractice();
+      // Last question - end practice and show results
+      setPracticeEnded(true);
     }
   };
 
@@ -221,19 +223,52 @@ export default function PracticeMode({ onExit }: PracticeModeProps) {
     }
   };
 
-  const endPractice = () => {
-    const accuracy = stats.correct + stats.incorrect > 0
-      ? Math.round((stats.correct / (stats.correct + stats.incorrect)) * 100)
-      : 0;
-    notify.success(`Practice Completed!\n\nCorrect: ${stats.correct}\nIncorrect: ${stats.incorrect}\nAccuracy: ${accuracy}%`);
-    resetPractice();
+  const handleEndPractice = () => {
+    // Called when user clicks "End Practice" button during practice
+    setPracticeEnded(true);
+  };
+
+  const enterReviewMode = (startIndex?: number) => {
+    setCurrentQuestionIndex(startIndex !== undefined ? startIndex : 0);
+    setReviewMode(true);
+    // Make sure all questions show explanation in review mode
+    setShowExplanation(true);
+  };
+
+  const exitReviewMode = () => {
+    setReviewMode(false);
   };
 
   const resetPractice = () => {
     setMode('select');
     setPracticeStarted(false);
+    setPracticeEnded(false);
+    setReviewMode(false);
     setStats({ correct: 0, incorrect: 0 });
     setQuestions([]);
+    setAllAnswers(new Map());
+    setAllDragDropAnswers(new Map());
+    setAllMatchingAnswers(new Map());
+    setAnsweredQuestions(new Set());
+    setCurrentQuestionIndex(0);
+    setShowExplanation(false);
+  };
+
+  const restartPractice = () => {
+    // Keep the mode and config, just reset the practice state
+    setPracticeStarted(false);
+    setPracticeEnded(false);
+    setReviewMode(false);
+    setStats({ correct: 0, incorrect: 0 });
+    setQuestions([]);
+    setAllAnswers(new Map());
+    setAllDragDropAnswers(new Map());
+    setAllMatchingAnswers(new Map());
+    setAnsweredQuestions(new Set());
+    setCurrentQuestionIndex(0);
+    setShowExplanation(false);
+    // Immediately start a new practice with the same settings
+    setTimeout(() => startPractice(), 0);
   };
 
   const handleReportSubmit = (report: Omit<QuestionReport, 'id' | 'reportedAt' | 'status'>) => {
@@ -558,6 +593,246 @@ export default function PracticeMode({ onExit }: PracticeModeProps) {
     );
   }
 
+  // Calculate correctness for each question (for review mode)
+  const getQuestionCorrectness = (questionIndex: number): boolean => {
+    const q = questions[questionIndex];
+    if (!q) return false;
+
+    if (q.type === 'drag-and-drop' && q.dragDropData) {
+      const dragAnswer = allDragDropAnswers.get(q.id) || {};
+      const dragAnswerEntries = Object.entries(dragAnswer);
+      return dragAnswerEntries.length > 0 && dragAnswerEntries.every(
+        ([itemIdx, categoryId]) => q.dragDropData!.correctMapping[parseInt(itemIdx)] === categoryId
+      );
+    } else if (q.type === 'matching' && q.matchingData) {
+      const matchAnswer = allMatchingAnswers.get(q.id) || {};
+      const matchAnswerEntries = Object.entries(matchAnswer);
+      return matchAnswerEntries.length > 0 && matchAnswerEntries.every(
+        ([leftId, rightId]) => q.matchingData!.correctMatches[leftId] === rightId
+      );
+    } else {
+      const userAnswer = allAnswers.get(q.id) || [];
+      return userAnswer.length > 0 &&
+        userAnswer.length === q.correctAnswer.length &&
+        userAnswer.every(a => q.correctAnswer.includes(a));
+    }
+  };
+
+  // Practice Results Screen (after practice ends)
+  if (practiceEnded && !reviewMode) {
+    const accuracy = stats.correct + stats.incorrect > 0
+      ? Math.round((stats.correct / (stats.correct + stats.incorrect)) * 100)
+      : 0;
+    const passed = accuracy >= 80;
+    const unansweredCount = questions.length - answeredQuestions.size;
+
+    return (
+      <div className="min-h-full relative overflow-hidden bg-gradient-to-br from-indigo-900 via-purple-900 to-pink-900">
+        <div className="absolute inset-0 opacity-20">
+          <div className={`absolute top-0 left-1/4 w-96 h-96 ${passed ? 'bg-green-500' : 'bg-orange-500'} rounded-full mix-blend-multiply filter blur-3xl animate-pulse`}></div>
+          <div className={`absolute bottom-0 right-1/4 w-96 h-96 ${passed ? 'bg-emerald-500' : 'bg-red-500'} rounded-full mix-blend-multiply filter blur-3xl animate-pulse`} style={{animationDelay: '2s'}}></div>
+        </div>
+
+        <div className="relative z-10 p-8 max-w-4xl mx-auto">
+          <div className="bg-white/10 backdrop-blur-2xl rounded-3xl shadow-2xl p-10 border border-white/20">
+            {/* Header */}
+            <div className="text-center mb-8">
+              <div className={`inline-flex items-center justify-center w-24 h-24 rounded-3xl mb-6 ${
+                passed ? 'bg-gradient-to-br from-green-500 to-emerald-500' : 'bg-gradient-to-br from-orange-500 to-red-500'
+              } shadow-2xl`}>
+                <span className="text-5xl">{passed ? '🎉' : '📚'}</span>
+              </div>
+              <h2 className="text-4xl font-black text-white mb-2">
+                Practice {timeRemaining === 0 && !isUnlimited ? 'Time Up!' : 'Complete!'}
+              </h2>
+              <p className="text-white/80 text-lg">
+                {passed ? 'Großartig! Du hast bestanden!' : 'Weiter üben - du schaffst das!'}
+              </p>
+            </div>
+
+            {/* Stats Grid */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+              <div className="bg-white/10 rounded-2xl p-4 text-center border border-white/10">
+                <div className="text-3xl font-black text-white mb-1">{accuracy}%</div>
+                <div className="text-white/60 text-sm font-semibold">Accuracy</div>
+              </div>
+              <div className="bg-green-500/20 rounded-2xl p-4 text-center border border-green-400/30">
+                <div className="text-3xl font-black text-green-400 mb-1">{stats.correct}</div>
+                <div className="text-white/60 text-sm font-semibold">Correct</div>
+              </div>
+              <div className="bg-red-500/20 rounded-2xl p-4 text-center border border-red-400/30">
+                <div className="text-3xl font-black text-red-400 mb-1">{stats.incorrect}</div>
+                <div className="text-white/60 text-sm font-semibold">Incorrect</div>
+              </div>
+              <div className="bg-gray-500/20 rounded-2xl p-4 text-center border border-gray-400/30">
+                <div className="text-3xl font-black text-gray-400 mb-1">{unansweredCount}</div>
+                <div className="text-white/60 text-sm font-semibold">Unanswered</div>
+              </div>
+            </div>
+
+            {/* Progress Bar */}
+            <div className="mb-8">
+              <div className="flex justify-between text-white/80 text-sm mb-2">
+                <span>Progress</span>
+                <span>{answeredQuestions.size} / {questions.length} Questions</span>
+              </div>
+              <div className="h-4 bg-white/10 rounded-full overflow-hidden">
+                <div
+                  className={`h-full rounded-full transition-all duration-500 ${
+                    passed ? 'bg-gradient-to-r from-green-500 to-emerald-500' : 'bg-gradient-to-r from-orange-500 to-red-500'
+                  }`}
+                  style={{ width: `${(answeredQuestions.size / questions.length) * 100}%` }}
+                />
+              </div>
+            </div>
+
+            {/* Action Buttons */}
+            <div className="flex flex-col sm:flex-row gap-4">
+              <button
+                onClick={() => enterReviewMode(0)}
+                className="flex-1 bg-gradient-to-r from-cyan-500 to-blue-500 hover:from-cyan-400 hover:to-blue-400 text-white font-black py-4 px-8 rounded-2xl shadow-xl transform hover:scale-105 transition-all duration-300 flex items-center justify-center gap-3"
+              >
+                <span className="text-2xl">🔍</span>
+                <span>Antworten überprüfen</span>
+              </button>
+              <button
+                onClick={restartPractice}
+                className="flex-1 bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-400 hover:to-pink-400 text-white font-black py-4 px-8 rounded-2xl shadow-xl transform hover:scale-105 transition-all duration-300 flex items-center justify-center gap-3"
+              >
+                <span className="text-2xl">🔄</span>
+                <span>Nochmal üben</span>
+              </button>
+            </div>
+
+            <button
+              onClick={resetPractice}
+              className="w-full mt-4 bg-white/10 hover:bg-white/20 text-white font-bold py-3 px-6 rounded-xl border border-white/30 transition-all"
+            >
+              Zurück zur Modusauswahl
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Review Mode Screen
+  if (reviewMode) {
+    return (
+      <div className="min-h-full relative overflow-auto bg-gradient-to-br from-indigo-900 via-purple-900 to-pink-900">
+        <div className="absolute inset-0 opacity-20">
+          <div className="absolute top-0 left-1/4 w-96 h-96 bg-blue-500 rounded-full mix-blend-multiply filter blur-3xl animate-pulse"></div>
+          <div className="absolute bottom-0 right-1/4 w-96 h-96 bg-purple-500 rounded-full mix-blend-multiply filter blur-3xl animate-pulse" style={{animationDelay: '2s'}}></div>
+        </div>
+
+        {/* Question Navigator */}
+        <div className="relative z-10 bg-white/10 backdrop-blur-xl border-b border-white/20 p-4">
+          <div className="max-w-6xl mx-auto">
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-white font-bold">Review Mode - Alle Fragen durchsehen</h3>
+              <button
+                onClick={exitReviewMode}
+                className="bg-white/20 hover:bg-white/30 text-white font-bold py-2 px-4 rounded-xl transition-all"
+              >
+                Zurück zu Ergebnissen
+              </button>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {questions.map((_, idx) => {
+                const isCorrect = getQuestionCorrectness(idx);
+                const isAnswered = answeredQuestions.has(idx);
+                const isCurrent = idx === currentQuestionIndex;
+
+                return (
+                  <button
+                    key={idx}
+                    onClick={() => setCurrentQuestionIndex(idx)}
+                    className={`w-10 h-10 rounded-lg font-bold text-sm transition-all ${
+                      isCurrent
+                        ? 'ring-2 ring-white ring-offset-2 ring-offset-transparent scale-110'
+                        : ''
+                    } ${
+                      !isAnswered
+                        ? 'bg-gray-500/50 text-white/60'
+                        : isCorrect
+                        ? 'bg-green-500 text-white'
+                        : 'bg-red-500 text-white'
+                    }`}
+                  >
+                    {idx + 1}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+
+        {/* Question Card */}
+        <div className="relative z-10 p-8 max-w-5xl mx-auto">
+          {currentQuestion && (
+            <>
+              <QuestionCard
+                question={currentQuestion}
+                questionNumber={currentQuestionIndex + 1}
+                totalQuestions={questions.length}
+                selectedAnswers={selectedAnswers}
+                onAnswerSelect={() => {}} // Read-only in review mode
+                showExplanation={true}
+                dragDropAnswer={dragDropAnswer}
+                onDragDropAnswerChange={() => {}} // Read-only
+                matchingAnswer={matchingAnswer}
+                onMatchingAnswerChange={() => {}} // Read-only
+              />
+
+              <div className="flex justify-between mt-8">
+                <div className="flex gap-3">
+                  <button
+                    onClick={() => currentQuestionIndex > 0 && setCurrentQuestionIndex(currentQuestionIndex - 1)}
+                    disabled={currentQuestionIndex === 0}
+                    className="bg-white/10 hover:bg-white/20 disabled:bg-white/5 disabled:text-white/30 backdrop-blur-sm text-white font-bold py-4 px-8 rounded-2xl border-2 border-white/30 hover:border-white/50 transition-all disabled:cursor-not-allowed"
+                  >
+                    ← Vorherige
+                  </button>
+                  <button
+                    onClick={() => setShowReportModal(true)}
+                    className="bg-red-500/20 hover:bg-red-500/30 backdrop-blur-sm text-white font-bold py-4 px-6 rounded-2xl border-2 border-red-400/30 hover:border-red-400/50 transition-all"
+                  >
+                    🚨 Fehler melden
+                  </button>
+                </div>
+
+                <button
+                  onClick={exitReviewMode}
+                  className="bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-400 hover:to-pink-400 text-white font-bold py-4 px-8 rounded-2xl shadow-lg transform hover:scale-105 transition-all duration-300"
+                >
+                  Zurück zu Ergebnissen
+                </button>
+
+                <button
+                  onClick={() => currentQuestionIndex < questions.length - 1 && setCurrentQuestionIndex(currentQuestionIndex + 1)}
+                  disabled={currentQuestionIndex === questions.length - 1}
+                  className="bg-gradient-to-r from-cyan-500 to-blue-500 hover:from-cyan-400 hover:to-blue-400 disabled:from-gray-500 disabled:to-gray-600 disabled:cursor-not-allowed text-white font-bold py-4 px-8 rounded-2xl shadow-lg transform hover:scale-105 transition-all duration-300 disabled:hover:scale-100"
+                >
+                  Nächste →
+                </button>
+              </div>
+            </>
+          )}
+        </div>
+
+        {/* Error Report Modal */}
+        {showReportModal && currentQuestion && (
+          <ErrorReportModal
+            questionId={currentQuestion.id}
+            questionNumber={currentQuestionIndex + 1}
+            onClose={() => setShowReportModal(false)}
+            onSubmit={handleReportSubmit}
+          />
+        )}
+      </div>
+    );
+  }
+
   // Practice Session - currentQuestion is already defined above
   if (!currentQuestion) {
     return (
@@ -637,7 +912,7 @@ export default function PracticeMode({ onExit }: PracticeModeProps) {
         <div className="flex justify-between items-center mt-8">
           <div className="flex gap-3">
             <button
-              onClick={resetPractice}
+              onClick={handleEndPractice}
               className="bg-white/10 hover:bg-white/20 backdrop-blur-sm text-white font-bold py-4 px-8 rounded-2xl border-2 border-white/30 hover:border-white/50 transition-all"
             >
               ← End Practice

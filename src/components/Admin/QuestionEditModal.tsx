@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Question } from '../../types/Question';
 import { notify } from '../../store/notificationStore';
+import RichTextEditor from '../UI/RichTextEditor';
 
 interface QuestionEditModalProps {
   questionId: string;
@@ -160,59 +161,75 @@ export default function QuestionEditModal({
           </div>
 
           {/* Question Text */}
-          <div className="mb-6">
-            <label className="block text-sm font-bold text-gray-700 mb-2">
-              Fragetext
-            </label>
-            <textarea
-              value={question.question}
-              onChange={(e) => updateQuestion('question', e.target.value)}
-              className="w-full px-4 py-3 border-2 border-gray-300 rounded-xl focus:border-blue-500 focus:outline-none resize-none"
-              rows={3}
-            />
-          </div>
+          <RichTextEditor
+            label="Fragetext"
+            value={question.question}
+            onChange={(value) => updateQuestion('question', value)}
+            minHeight="100px"
+            showPreview={true}
+            previewLabel="Vorschau (so sieht es im Exam aus)"
+          />
 
           {/* Options */}
           <div className="mb-6">
             <label className="block text-sm font-bold text-gray-700 mb-3">
               Antwortoptionen (Klicke auf ✓ um richtige Antwort zu markieren)
             </label>
-            <div className="space-y-3">
+            <div className="space-y-4">
               {question.options.map((option, index) => (
-                <div key={index} className="flex items-start gap-3">
-                  <button
-                    onClick={() => toggleCorrectAnswer(index)}
-                    className={`flex-shrink-0 w-10 h-10 rounded-lg border-2 flex items-center justify-center transition-all ${
-                      question.correctAnswer.includes(index)
-                        ? 'bg-green-500 border-green-500 text-white'
-                        : 'bg-white border-gray-300 text-gray-400 hover:border-green-500'
-                    }`}
-                  >
-                    {question.correctAnswer.includes(index) ? '✓' : index + 1}
-                  </button>
-                  <input
-                    type="text"
-                    value={option}
-                    onChange={(e) => updateOption(index, e.target.value)}
-                    className="flex-1 px-4 py-2 border-2 border-gray-300 rounded-xl focus:border-blue-500 focus:outline-none"
-                  />
+                <div key={index} className="border-2 border-gray-200 rounded-xl p-3 bg-gray-50">
+                  <div className="flex items-start gap-3 mb-2">
+                    <button
+                      onClick={() => toggleCorrectAnswer(index)}
+                      className={`flex-shrink-0 w-10 h-10 rounded-lg border-2 flex items-center justify-center transition-all ${
+                        question.correctAnswer.includes(index)
+                          ? 'bg-green-500 border-green-500 text-white'
+                          : 'bg-white border-gray-300 text-gray-400 hover:border-green-500'
+                      }`}
+                    >
+                      {question.correctAnswer.includes(index) ? '✓' : String.fromCharCode(65 + index)}
+                    </button>
+                    <input
+                      type="text"
+                      value={option}
+                      onChange={(e) => updateOption(index, e.target.value)}
+                      className="flex-1 px-4 py-2 border-2 border-gray-300 rounded-xl focus:border-blue-500 focus:outline-none bg-white"
+                      placeholder={`Option ${String.fromCharCode(65 + index)}`}
+                    />
+                  </div>
+                  {/* Option Preview */}
+                  {option && option.includes('<') && (
+                    <div className="ml-13 pl-13 border-l-2 border-blue-300 ml-[52px]">
+                      <div className="text-xs text-blue-600 font-semibold mb-1">Vorschau:</div>
+                      <div
+                        className="text-gray-700 bg-white p-2 rounded-lg border border-gray-200 option-preview"
+                        dangerouslySetInnerHTML={{ __html: option }}
+                      />
+                    </div>
+                  )}
                 </div>
               ))}
             </div>
           </div>
 
+          {/* Styles for option preview */}
+          <style>{`
+            .option-preview b, .option-preview strong { font-weight: bold; }
+            .option-preview i, .option-preview em { font-style: italic; }
+            .option-preview u { text-decoration: underline; }
+            .option-preview ul { list-style-type: disc; padding-left: 1.5rem; }
+            .option-preview ol { list-style-type: decimal; padding-left: 1.5rem; }
+          `}</style>
+
           {/* Explanation */}
-          <div className="mb-6">
-            <label className="block text-sm font-bold text-gray-700 mb-2">
-              Erklärung
-            </label>
-            <textarea
-              value={question.explanation}
-              onChange={(e) => updateQuestion('explanation', e.target.value)}
-              className="w-full px-4 py-3 border-2 border-gray-300 rounded-xl focus:border-blue-500 focus:outline-none resize-none"
-              rows={4}
-            />
-          </div>
+          <RichTextEditor
+            label="Erklärung"
+            value={question.explanation}
+            onChange={(value) => updateQuestion('explanation', value)}
+            minHeight="120px"
+            showPreview={true}
+            previewLabel="Vorschau der Erklärung"
+          />
 
           {/* Topic and Difficulty */}
           <div className="grid grid-cols-2 gap-4 mb-6">

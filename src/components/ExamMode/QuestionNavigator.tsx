@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useRef, useEffect } from 'react';
 
 interface QuestionNavigatorProps {
   totalQuestions: number;
@@ -17,6 +17,20 @@ export const QuestionNavigator: React.FC<QuestionNavigatorProps> = ({
   onNavigate,
   isSubmitted
 }) => {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const buttonRefs = useRef<(HTMLButtonElement | null)[]>([]);
+
+  // Auto-scroll to current question
+  useEffect(() => {
+    const currentButton = buttonRefs.current[currentQuestion];
+    if (currentButton && containerRef.current) {
+      currentButton.scrollIntoView({
+        behavior: 'smooth',
+        block: 'nearest',
+        inline: 'center'
+      });
+    }
+  }, [currentQuestion]);
   const getButtonClass = (index: number) => {
     const baseClass = "px-3 py-1.5 text-sm font-medium rounded transition-all duration-200 border";
     const isCurrent = index === currentQuestion;
@@ -57,10 +71,14 @@ export const QuestionNavigator: React.FC<QuestionNavigatorProps> = ({
   return (
     <div className="bg-white border-b border-gray-200 sticky top-0 z-10 shadow-sm">
       <div className="max-w-7xl mx-auto px-4 py-3">
-        <div className="flex items-center gap-2 overflow-x-auto pb-2 scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100">
+        <div
+          ref={containerRef}
+          className="flex items-center gap-2 overflow-x-auto pb-2 scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100"
+        >
           {Array.from({ length: totalQuestions }, (_, i) => (
             <button
               key={i}
+              ref={(el) => { buttonRefs.current[i] = el; }}
               onClick={() => onNavigate(i)}
               className={getButtonClass(i)}
               title={`Frage ${i + 1}${answeredQuestions.has(i) ? ' (beantwortet)' : ''}`}

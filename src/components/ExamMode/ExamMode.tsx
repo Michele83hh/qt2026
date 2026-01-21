@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Question } from '../../types/Question';
 import { getExamQuestions } from '../../utils/questionLoader';
 import QuestionCard from './QuestionCard';
@@ -8,8 +8,9 @@ import ConfirmationModal from './ConfirmationModal';
 import ExamConfig, { ExamConfiguration } from './ExamConfig';
 import { ErrorReportModal } from './ErrorReportModal';
 import { QuestionReport } from '../../types/questions';
-import { shuffleQuestionsOptions } from '../../utils/questionShuffler';
+import { shuffleQuestionsOptions, shuffleArray } from '../../utils/questionShuffler';
 import { notify } from '../../store/notificationStore';
+import { saveExamResults } from '../../utils/examSaver';
 
 interface ExamModeProps {
   onExit: () => void;
@@ -27,23 +28,69 @@ export default function ExamMode({ onExit }: ExamModeProps) {
   const [examStarted, setExamStarted] = useState(false);
   const [examCompleted, setExamCompleted] = useState(false);
   const [reviewMode, setReviewMode] = useState(false);
+  const examSavedRef = useRef(false);
   const [showSubmitConfirm, setShowSubmitConfirm] = useState(false);
   const [showReportModal, setShowReportModal] = useState(false);
 
+  // Timer effect - DO NOT include timeRemaining in dependencies!
+  // Using functional update (prev => prev - 1) so we don't need current value
   useEffect(() => {
-    if (examStarted && !examCompleted && timeRemaining > 0) {
-      const timer = setInterval(() => {
-        setTimeRemaining(prev => {
-          if (prev <= 1) {
-            setExamCompleted(true);
-            return 0;
-          }
-          return prev - 1;
-        });
-      }, 1000);
-      return () => clearInterval(timer);
+    if (!examStarted || examCompleted) return;
+
+    const timer = setInterval(() => {
+      setTimeRemaining(prev => {
+        if (prev <= 1) {
+          setExamCompleted(true);
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+
+    return () => clearInterval(timer);
+  }, [examStarted, examCompleted]); // Removed timeRemaining - prevents memory leak
+
+  // Save exam results when exam is completed (only once)
+  useEffect(() => {
+    if (examCompleted && questions.length > 0 && !examSavedRef.current) {
+      examSavedRef.current = true;
+      saveExamResults({
+        questions,
+        answers,
+        dragDropAnswers,
+        matchingAnswers
+      });
     }
-  }, [examStarted, examCompleted, timeRemaining]);
+  }, [examCompleted, questions, answers, dragDropAnswers, matchingAnswers]);
+
+  // Keyboard navigation with arrow keys
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Don't navigate if typing in an input or textarea
+      const target = e.target as HTMLElement;
+      if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable) {
+        return;
+      }
+
+      if (e.key === 'ArrowLeft') {
+        e.preventDefault();
+        if (currentQuestionIndex > 0) {
+          setCurrentQuestionIndex(currentQuestionIndex - 1);
+        }
+      } else if (e.key === 'ArrowRight') {
+        e.preventDefault();
+        if (currentQuestionIndex < questions.length - 1) {
+          setCurrentQuestionIndex(currentQuestionIndex + 1);
+        }
+      }
+    };
+
+    // Only add listener when exam is active (during exam or in review mode)
+    if (examStarted && questions.length > 0) {
+      window.addEventListener('keydown', handleKeyDown);
+      return () => window.removeEventListener('keydown', handleKeyDown);
+    }
+  }, [examStarted, currentQuestionIndex, questions.length]);
 
   const handleConfigSubmit = (config: ExamConfiguration) => {
     setExamConfig(config);
@@ -57,9 +104,7 @@ export default function ExamMode({ onExit }: ExamModeProps) {
 
   const startExam = () => {
     try {
-      console.log('Starting exam...');
       const allQuestions = getExamQuestions();
-      console.log('Got exam questions:', allQuestions.length);
 
       if (!allQuestions || allQuestions.length === 0) {
         console.error('No exam questions available!');
@@ -98,29 +143,21 @@ export default function ExamMode({ onExit }: ExamModeProps) {
         const questionsNeeded = Math.round(examConfig.questionCount * percentage);
         const availableQuestions = questionsByTopic[topic] || [];
 
-        // Shuffle and take the needed amount
-        const shuffled = [...availableQuestions].sort(() => Math.random() - 0.5);
+        // Use proper Fisher-Yates shuffle with crypto randomness
+        const shuffled = shuffleArray(availableQuestions);
         const selected = shuffled.slice(0, Math.min(questionsNeeded, shuffled.length));
 
         selectedQuestions.push(...selected);
-        console.log(`${topic}: ${selected.length}/${questionsNeeded} questions (available: ${availableQuestions.length})`);
       });
 
-      // Final shuffle to mix up the order
-      const finalQuestions = [...selectedQuestions].sort(() => Math.random() - 0.5);
+      // Final shuffle to mix up the order - use proper Fisher-Yates
+      const finalQuestions = shuffleArray(selectedQuestions);
 
       // Shuffle answer options for each question
       const shuffledQuestions = shuffleQuestionsOptions(finalQuestions);
 
       setQuestions(shuffledQuestions);
       setExamStarted(true);
-      console.log('Exam started successfully with', finalQuestions.length, 'questions');
-      console.log('Distribution:', Object.fromEntries(
-        Object.entries(topicDistribution).map(([topic, pct]) => [
-          topic,
-          `${Math.round(examConfig.questionCount * pct)} (${Math.round(pct * 100)}%)`
-        ])
-      ));
     } catch (error) {
       console.error('Error starting exam:', error);
       notify.error('Fehler beim Starten der Prüfung: ' + (error as Error).message);
@@ -292,6 +329,7 @@ export default function ExamMode({ onExit }: ExamModeProps) {
   const handleRetake = () => {
     setExamCompleted(false);
     setExamStarted(false);
+    examSavedRef.current = false;
     setQuestions([]);
     setCurrentQuestionIndex(0);
     setAnswers(new Map());
