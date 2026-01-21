@@ -1,10 +1,8 @@
 import { Question, Topic } from '../types/Question';
 import {
-  ExtendedExamHistory,
   ExtendedExamHistoryEntry,
   StoredUserAnswers,
-  StoredQuestion,
-  createEmptyExtendedHistory
+  StoredQuestion
 } from '../types/Progress';
 import { loadExamHistory, saveExamHistory, isAnswerCorrect } from './validation';
 import { CCNA_PASSING_SCORE, MAX_EXAM_HISTORY_ENTRIES } from './constants';
