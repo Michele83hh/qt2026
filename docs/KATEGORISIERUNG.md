@@ -2,16 +2,18 @@
 
 ## Übersicht
 
-Die 888 Fragen sind in 6 CCNA-Domains kategorisiert, basierend auf der offiziellen Cisco CCNA 200-301 Prüfungsstruktur.
+Die 888 Fragen sind in 6 CCNA-Domains kategorisiert, basierend auf dem **offiziellen Cisco CCNA 200-301 v1.1 Exam Blueprint**.
 
 | Domain | Präfix | Anzahl | Anteil | Cisco-Ziel |
 |--------|--------|--------|--------|------------|
-| Network Fundamentals | `nf-` | 356 | 40.1% | 20% |
-| Network Access | `na-` | 213 | 24.0% | 20% |
-| IP Connectivity | `ic-` | 131 | 14.8% | 25% |
-| IP Services | `is-` | 75 | 8.4% | 10% |
-| Security Fundamentals | `sf-` | 109 | 12.3% | 15% |
+| Network Fundamentals | `nf-` | 495 | 55.7% | 20% |
+| Network Access | `na-` | 187 | 21.1% | 20% |
+| IP Connectivity | `ic-` | 47 | 5.3% | 25% |
+| IP Services | `is-` | 85 | 9.6% | 10% |
+| Security Fundamentals | `sf-` | 70 | 7.9% | 15% |
 | Automation and Programmability | `ap-` | 4 | 0.5% | 10% |
+
+**Hinweis:** Die aktuelle Verteilung weicht vom Ziel ab, da noch Module ausstehen (OSPF, ACLs, NAT, Automation). Nach Abschluss aller Netacad-Module wird die Verteilung ausgeglichener.
 
 ---
 
